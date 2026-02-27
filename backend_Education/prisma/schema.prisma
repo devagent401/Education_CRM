@@ -1,0 +1,395 @@
+// ============================================
+// Multi-Tenant Educational Institution Management System
+// Prisma Schema - Production Ready
+// ============================================
+// Rules: Every table has id, institution_id, created_at, updated_at
+// UUIDs throughout, Soft delete where applicable
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// SUPER ADMIN & PLATFORM LEVEL
+// ============================================
+// SuperAdmin operates at platform level, no institution_id
+
+model SuperAdmin {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  @@map("super_admins")
+}
+
+// ============================================
+// INSTITUTION
+// ============================================
+
+model Institution {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  slug      String   @unique
+  email     String
+  phone     String?
+  address   String?
+
+  // Branding
+  logoUrl       String?
+  primaryColor  String?  @default("#2563eb")
+  secondaryColor String? @default("#64748b")
+
+  status    InstitutionStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  users        User[]
+  students     Student[]
+  guardians    Guardian[]
+  attendance   AttendanceRecord[]
+  attendanceLogs AttendanceAuditLog[]
+  academicStructures AcademicStructure[]
+  admissionFields AdmissionField[]
+  idCardTemplates IdCardTemplate[]
+  idCards       IdCard[]
+
+  @@map("institutions")
+}
+
+enum InstitutionStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+}
+
+// ============================================
+// USERS & AUTH
+// ============================================
+
+model User {
+  id             String   @id @default(uuid())
+  institutionId  String
+  email          String
+  password       String
+  name           String
+  phone          String?
+  role           UserRole
+  isActive       Boolean  @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  // Teacher relations
+  teacherProfile TeacherProfile?
+
+  @@unique([institutionId, email])
+  @@map("users")
+}
+
+enum UserRole {
+  INSTITUTION_ADMIN
+  TEACHER
+  STUDENT
+  GUARDIAN
+}
+
+model RefreshToken {
+  id            String   @id @default(uuid())
+  userId        String
+  institutionId String
+  token         String   @unique
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+// ============================================
+// PERMISSIONS & RBAC
+// ============================================
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  resource    String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  role         UserRole
+  permissionId String
+  createdAt    DateTime   @default(now())
+
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+  @@map("role_permissions")
+}
+
+// ============================================
+// ACADEMIC STRUCTURE (Dynamic)
+// ============================================
+
+model AcademicStructure {
+  id             String   @id @default(uuid())
+  institutionId  String
+  name           String   // e.g., "Grade 1", "Class A"
+  code           String
+  level          Int      // 1=Grade, 2=Section, 3=Subject, etc.
+  parentId       String?
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  metadata       Json?    // Flexible for extra config
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  children    AcademicStructure[] @relation("StructureHierarchy", fields: [id], references: [parentId])
+  parent      AcademicStructure?  @relation("StructureHierarchy", fields: [parentId], references: [id])
+
+  @@unique([institutionId, code])
+  @@map("academic_structures")
+}
+
+// ============================================
+// ADMISSION FIELDS (Dynamic)
+// ============================================
+
+model AdmissionField {
+  id             String   @id @default(uuid())
+  institutionId  String
+  name           String
+  key            String
+  type           String   // text, number, date, select, etc.
+  required       Boolean  @default(false)
+  options        Json?    // For select/multiselect
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([institutionId, key])
+  @@map("admission_fields")
+}
+
+// ============================================
+// GUARDIAN
+// ============================================
+
+model Guardian {
+  id             String   @id @default(uuid())
+  institutionId  String
+  name           String
+  email          String?
+  phone          String
+  relation       String   // Father, Mother, etc.
+  address        String?
+  occupation     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  students     Student[]
+
+  @@map("guardians")
+}
+
+// ============================================
+// STUDENT
+// ============================================
+
+model Student {
+  id             String        @id @default(uuid())
+  institutionId  String
+  rollNumber     String
+  studentId      String        // External/admission ID
+  name           String
+  dateOfBirth    DateTime?
+  gender         String?
+  guardianId     String?
+  status         StudentStatus @default(ACTIVE)
+  admissionData  Json?         // Dynamic fields
+  photoUrl       String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  guardian    Guardian?   @relation(fields: [guardianId], references: [id], onDelete: SetNull)
+
+  attendance   AttendanceRecord[]
+  idCards      IdCard[]
+
+  @@unique([institutionId, rollNumber])
+  @@unique([institutionId, studentId])
+  @@map("students")
+}
+
+enum StudentStatus {
+  ACTIVE
+  PASSED
+  DROPOUT
+  TRANSFERRED
+}
+
+// ============================================
+// TEACHER PROFILE
+// ============================================
+
+model TeacherProfile {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  institutionId  String
+  employeeId     String?
+  department     String?
+  specialization String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([institutionId, employeeId])
+  @@map("teacher_profiles")
+}
+
+// ============================================
+// ATTENDANCE
+// ============================================
+
+model AttendanceRecord {
+  id             String   @id @default(uuid())
+  institutionId  String
+  studentId      String
+  date           DateTime @db.Date
+  status         AttendanceStatus
+  remarks        String?
+  recordedById   String?
+  source         AttendanceSource @default(MANUAL)
+  sourceRef      String?   // File path, batch ID for uploads
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  auditLogs AttendanceAuditLog[]
+
+  @@unique([institutionId, studentId, date])
+  @@map("attendance_records")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+  LEAVE
+}
+
+enum AttendanceSource {
+  MANUAL
+  CSV
+  EXCEL
+  IMAGE_OCR
+}
+
+model AttendanceAuditLog {
+  id             String   @id @default(uuid())
+  institutionId  String
+  recordId       String
+  action         String   // created, updated, deleted
+  previousData   Json?
+  newData        Json?
+  performedById  String?
+  performedAt    DateTime @default(now())
+  ipAddress      String?
+  userAgent      String?
+
+  institution Institution       @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  record     AttendanceRecord  @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@map("attendance_audit_logs")
+}
+
+// ============================================
+// ID CARD
+// ============================================
+
+model IdCardTemplate {
+  id             String   @id @default(uuid())
+  institutionId  String
+  name           String
+  layout         Json     // Template structure
+  fields         Json     // Dynamic field mappings
+  width          Int      @default(85)   // mm
+  height         Int      @default(54)   // mm
+  includeQrCode  Boolean  @default(true)
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  idCards     IdCard[]
+
+  @@map("id_card_templates")
+}
+
+model IdCard {
+  id             String   @id @default(uuid())
+  institutionId  String
+  studentId      String
+  templateId     String
+  qrCodeData     String?
+  qrCodeUrl      String?
+  pdfUrl         String?
+  status         IdCardStatus @default(DRAFT)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  institution Institution    @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  student     Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  template    IdCardTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  @@unique([institutionId, studentId, templateId])
+  @@map("id_cards")
+}
+
+enum IdCardStatus {
+  DRAFT
+  ISSUED
+  REVOKED
+}

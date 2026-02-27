@@ -1,0 +1,27 @@
+/**
+ * Design system tokens & custom utilities
+ * Imported by app/globals.css for design consistency
+ */
+
+/* Spacing scale (ReliCSS mindset - no magic numbers) */
+:root {
+  --spacing-page: 1.5rem; /* 24px mobile */
+  --spacing-section: 1.5rem;
+  --spacing-card: 1rem;
+  --spacing-touch: 2.75rem; /* min 44px touch target */
+}
+
+@media (min-width: 768px) {
+  :root {
+    --spacing-page: 2rem;
+    --spacing-section: 2rem;
+    --spacing-card: 1.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --spacing-page: 2.5rem;
+    --spacing-section: 2.5rem;
+  }
+}
