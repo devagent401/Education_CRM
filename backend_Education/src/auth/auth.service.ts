@@ -1,11 +1,21 @@
 import { Injectable } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../infrastructure/persistence/prisma/prisma.service';
 import type { AuthenticatedUser } from '../domain/entities';
+
+const SALT_ROUNDS = 10;
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  async hashPassword(plainPassword: string): Promise<string> {
+    return bcrypt.hash(plainPassword, SALT_ROUNDS);
+  }
 
   async validateCredentials(
     _institutionId: string,
@@ -35,6 +45,15 @@ export class AuthService {
       { ...payload, type: 'refresh' },
       { expiresIn: 604800 },
     ); // 7 days
+
+    await this.prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        institutionId: user.institutionId || '',
+        token: refreshToken,
+        expiresAt: new Date(Date.now() + 604800 * 1000),
+      },
+    });
 
     return {
       accessToken,

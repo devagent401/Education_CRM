@@ -1,0 +1,366 @@
+{
+  "info": {
+    "name": "Education CRM - Backend API",
+    "description": "Multi-tenant Educational Institution Management System API\n\nBase URL: {{base_url}}\nSwagger Docs: {{base_url}}/api/docs\n\nAuthentication:\n- Login to get accessToken\n- Use Bearer token for protected endpoints\n- Attendance endpoints require x-institution-id header",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "institution_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"institutionId\": \"{{institution_id}}\",\n  \"email\": \"teacher@school.com\",\n  \"password\": \"SecurePass123!\",\n  \"name\": \"John Doe\",\n  \"role\": \"TEACHER\",\n  \"phone\": \"+1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Register a new user. Requires an existing institution.\n\n**Roles:** INSTITUTION_ADMIN | TEACHER | STUDENT | GUARDIAN",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (pm.response.code === 201) {",
+                    "    const json = pm.response.json();",
+                    "    pm.collectionVariables.set('access_token', json.accessToken || '');",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "Super Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"superadmin@platform.com\",\n  \"password\": \"SuperAdmin@123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/super-admin/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "super-admin", "login"]
+            },
+            "description": "Platform-level Super Admin login. No institutionId required.\n\n**Default credentials** (from seed):\n- Email: superadmin@platform.com\n- Password: SuperAdmin@123!",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (pm.response.code === 200) {",
+                    "    const json = pm.response.json();",
+                    "    pm.collectionVariables.set('access_token', json.accessToken || '');",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"teacher@school.com\",\n  \"password\": \"SecurePass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Authenticate user and get access + refresh tokens.\n\n**Required:**\n- institutionId: UUID of the institution\n- email: Valid email\n- password: Min 8 characters",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (pm.response.code === 200) {",
+                    "    const json = pm.response.json();",
+                    "    pm.collectionVariables.set('access_token', json.accessToken || '');",
+                    "    if (json.user?.institutionId) {",
+                    "        pm.collectionVariables.set('institution_id', json.user.institutionId);",
+                    "    }",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Institution",
+      "item": [
+        {
+          "name": "Create Institution",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo School\",\n  \"code\": \"DEMO001\",\n  \"slug\": \"demo-school\",\n  \"email\": \"admin@demoschool.com\",\n  \"phone\": \"+1234567890\",\n  \"address\": \"123 Education Street, City\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/institution",
+              "host": ["{{base_url}}"],
+              "path": ["institution"]
+            },
+            "description": "Create a new institution.\n\n**Required:** name, code, slug, email\n**Optional:** phone, address",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (pm.response.code === 201 || pm.response.code === 200) {",
+                    "    const json = pm.response.json();",
+                    "    if (json.id) {",
+                    "        pm.collectionVariables.set('institution_id', json.id);",
+                    "    }",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Attendance",
+      "item": [
+        {
+          "name": "Record Attendance (Manual)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-institution-id",
+                "value": "{{institution_id}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"00000000-0000-0000-0000-000000000000\",\n  \"date\": \"2025-02-28\",\n  \"status\": \"PRESENT\",\n  \"remarks\": \"On time\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/attendance/record",
+              "host": ["{{base_url}}"],
+              "path": ["attendance", "record"]
+            },
+            "description": "Record single attendance entry manually.\n\n**Required headers:** x-institution-id, Authorization (Bearer token)\n**Status values:** PRESENT | ABSENT | LATE | EXCUSED | LEAVE"
+          }
+        },
+        {
+          "name": "Upload CSV - Preview",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-institution-id",
+                "value": "{{institution_id}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "date",
+                  "value": "2025-02-28",
+                  "type": "text",
+                  "description": "ISO date (YYYY-MM-DD)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/attendance/upload/csv",
+              "host": ["{{base_url}}"],
+              "path": ["attendance", "upload", "csv"]
+            },
+            "description": "Preview CSV upload - validates without creating records.\n\n**CSV columns:** roll_number (or rollNumber), student_id (or studentId), status, remarks\n**Status:** PRESENT | ABSENT | LATE | EXCUSED | LEAVE"
+          }
+        },
+        {
+          "name": "Upload CSV - Submit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-institution-id",
+                "value": "{{institution_id}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "date",
+                  "value": "2025-02-28",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/attendance/upload/csv/submit",
+              "host": ["{{base_url}}"],
+              "path": ["attendance", "upload", "csv", "submit"]
+            },
+            "description": "Submit CSV - creates attendance records."
+          }
+        },
+        {
+          "name": "Upload Excel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-institution-id",
+                "value": "{{institution_id}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "date",
+                  "value": "2025-02-28",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/attendance/upload/excel",
+              "host": ["{{base_url}}"],
+              "path": ["attendance", "upload", "excel"]
+            },
+            "description": "Preview Excel upload - same column structure as CSV."
+          }
+        },
+        {
+          "name": "Upload Image (OCR)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-institution-id",
+                "value": "{{institution_id}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "date",
+                  "value": "2025-02-28",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/attendance/upload/image",
+              "host": ["{{base_url}}"],
+              "path": ["attendance", "upload", "image"]
+            },
+            "description": "OCR-based image attendance upload (preview)."
+          }
+        }
+      ]
+    }
+  ]
+}

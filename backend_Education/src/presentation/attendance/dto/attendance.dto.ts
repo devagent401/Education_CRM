@@ -16,7 +16,7 @@ export enum AttendanceStatusDto {
 }
 
 export class RecordAttendanceDto {
-  @ApiProperty()
+  @ApiProperty({ example: '00000000-0000-0000-0000-000000000000' })
   @IsUUID()
   studentId: string;
 

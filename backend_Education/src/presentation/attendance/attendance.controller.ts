@@ -5,9 +5,19 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { Request } from 'express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import { RecordAttendanceDto } from './dto/attendance.dto';
 import { RecordAttendanceUseCase } from '../../application/attendance/use-cases/record-attendance.use-case';
 import { BulkAttendanceUseCase } from '../../application/attendance/use-cases/bulk-attendance.use-case';
@@ -15,16 +25,12 @@ import { CsvAttendanceParser } from '../../infrastructure/parsers/csv-attendance
 import { ExcelAttendanceParser } from '../../infrastructure/parsers/excel-attendance.parser';
 import { ImageAttendanceParser } from '../../infrastructure/ocr/image-attendance.parser';
 import { InstitutionGuard } from '../common/guards/institution.guard';
-
-/** Extend Express Request for institutionId */
-interface InstitutionRequest {
-  institutionId: string;
-  user?: { id: string };
-}
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 @ApiTags('attendance')
+@ApiSecurity('institution-id')
 @Controller('attendance')
-@UseGuards(InstitutionGuard)
+@UseGuards(JwtAuthGuard, InstitutionGuard)
 export class AttendanceController {
   constructor(
     private readonly recordAttendanceUseCase: RecordAttendanceUseCase,
@@ -34,15 +40,20 @@ export class AttendanceController {
     private readonly imageParser: ImageAttendanceParser,
   ) {}
 
+  private getContext(req: Request) {
+    const instId = (req as Request & { institutionId: string }).institutionId;
+    const userId = (req as Request & { user?: { id: string } }).user?.id;
+    return { institutionId: instId, recordedById: userId ?? '' };
+  }
+
   @Post('record')
   @ApiBearerAuth()
-  async record(
-    @Body() dto: RecordAttendanceDto,
-    // @Req() req: InstitutionRequest,
-  ) {
-    // In real app: req from guard, user from JWT
-    const institutionId = 'inst-placeholder'; // From guard
-    const recordedById = 'user-placeholder'; // From JWT
+  @ApiOperation({ summary: 'Record attendance', description: 'Record single attendance entry manually' })
+  @ApiBody({ type: RecordAttendanceDto })
+  @ApiResponse({ status: 201, description: 'Attendance recorded successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid input or missing x-institution-id' })
+  async record(@Body() dto: RecordAttendanceDto, @Req() req: Request) {
+    const { institutionId, recordedById } = this.getContext(req);
 
     return this.recordAttendanceUseCase.execute({
       institutionId,
@@ -58,21 +69,24 @@ export class AttendanceController {
   @Post('upload/csv')
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload CSV (preview)', description: 'Preview and validate CSV attendance upload without creating records' })
   @ApiBody({
     schema: {
       type: 'object',
+      required: ['file', 'date'],
       properties: {
-        file: { type: 'string', format: 'binary' },
-        date: { type: 'string', format: 'date' },
+        file: { type: 'string', format: 'binary', description: 'CSV file with columns: roll_number, student_id, status, remarks' },
+        date: { type: 'string', format: 'date', example: '2025-02-28' },
       },
     },
   })
+  @ApiResponse({ status: 200, description: 'Preview with valid/invalid counts' })
   async uploadCsv(
     @UploadedFile() file: Express.Multer.File,
     @Body('date') date: string,
-    // @Req() req: InstitutionRequest,
+    @Req() req: Request,
   ) {
-    const institutionId = 'inst-placeholder';
+    const { institutionId } = this.getContext(req);
     const csvContent = file.buffer.toString('utf-8');
     const { rows, errors } = this.csvParser.parse(csvContent);
 
@@ -95,12 +109,25 @@ export class AttendanceController {
 
   @Post('upload/csv/submit')
   @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload CSV (submit)', description: 'Submit CSV attendance upload and create records' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file', 'date'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        date: { type: 'string', format: 'date', example: '2025-02-28' },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Upload result with created/skipped/errors counts' })
   async submitCsv(
     @UploadedFile() file: Express.Multer.File,
     @Body('date') date: string,
+    @Req() req: Request,
   ) {
-    const institutionId = 'inst-placeholder';
-    const recordedById = 'user-placeholder';
+    const { institutionId, recordedById } = this.getContext(req);
     const csvContent = file.buffer.toString('utf-8');
     const { rows, errors } = this.csvParser.parse(csvContent);
 
@@ -127,11 +154,25 @@ export class AttendanceController {
 
   @Post('upload/excel')
   @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload Excel', description: 'Preview Excel attendance upload' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file', 'date'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        date: { type: 'string', format: 'date', example: '2025-02-28' },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Preview with valid/invalid counts' })
   async uploadExcel(
     @UploadedFile() file: Express.Multer.File,
     @Body('date') date: string,
+    @Req() req: Request,
   ) {
-    const institutionId = 'inst-placeholder';
+    const { institutionId } = this.getContext(req);
     const { rows, errors } = this.excelParser.parse(file.buffer);
 
     const preview = await this.bulkAttendanceUseCase.validateAndPreview(
@@ -150,11 +191,25 @@ export class AttendanceController {
 
   @Post('upload/image')
   @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload image (OCR)', description: 'Preview OCR-based image attendance upload' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file', 'date'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        date: { type: 'string', format: 'date', example: '2025-02-28' },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Preview with valid/invalid counts or parse errors' })
   async uploadImage(
     @UploadedFile() file: Express.Multer.File,
     @Body('date') date: string,
+    @Req() req: Request,
   ) {
-    const institutionId = 'inst-placeholder';
+    const { institutionId } = this.getContext(req);
     const { rows, errors } = await this.imageParser.parse(file.buffer);
 
     if (errors.length > 0) {

@@ -44,11 +44,16 @@ model Institution {
   email     String
   phone     String?
   address   String?
+  website   String?
 
   // Branding
   logoUrl       String?
+  bannerUrl     String?
+  footerText    String?
+  tagline       String?
   primaryColor  String?  @default("#2563eb")
   secondaryColor String? @default("#64748b")
+  socialLinks   Json?    // { facebook?, twitter?, linkedin?, youtube?, instagram? }
 
   status    InstitutionStatus @default(ACTIVE)
   createdAt DateTime @default(now())
@@ -65,6 +70,8 @@ model Institution {
   admissionFields AdmissionField[]
   idCardTemplates IdCardTemplate[]
   idCards       IdCard[]
+  classRoutines ClassRoutine[]
+  feeStructures FeeStructure[]
 
   @@map("institutions")
 }
@@ -107,18 +114,30 @@ enum UserRole {
   TEACHER
   STUDENT
   GUARDIAN
+  ACCOUNTANT
 }
 
 model RefreshToken {
   id            String   @id @default(uuid())
   userId        String
-  institutionId String
+  institutionId String   @default("")
   token         String   @unique
   expiresAt     DateTime
   revokedAt     DateTime?
   createdAt     DateTime @default(now())
 
   @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@map("password_reset_tokens")
 }
 
 // ============================================
@@ -171,7 +190,7 @@ model AcademicStructure {
 
   institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
 
-  children    AcademicStructure[] @relation("StructureHierarchy", fields: [id], references: [parentId])
+  children    AcademicStructure[] @relation("StructureHierarchy")
   parent      AcademicStructure?  @relation("StructureHierarchy", fields: [parentId], references: [id])
 
   @@unique([institutionId, code])
@@ -238,6 +257,9 @@ model Student {
   dateOfBirth    DateTime?
   gender         String?
   guardianId     String?
+  classId        String?       // AcademicStructure (level=1 Class)
+  shift          String?       // Morning, Day
+  batch          String?
   status         StudentStatus @default(ACTIVE)
   admissionData  Json?         // Dynamic fields
   photoUrl       String?
@@ -250,6 +272,7 @@ model Student {
 
   attendance   AttendanceRecord[]
   idCards      IdCard[]
+  payments     StudentPayment[]
 
   @@unique([institutionId, rollNumber])
   @@unique([institutionId, studentId])
@@ -274,14 +297,109 @@ model TeacherProfile {
   employeeId     String?
   department     String?
   specialization String?
+  salary         Decimal? @db.Decimal(12, 2)
+  joinDate       DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   deletedAt      DateTime?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  routines ClassRoutine[]
 
   @@unique([institutionId, employeeId])
   @@map("teacher_profiles")
+}
+
+// ============================================
+// CLASS ROUTINE / TIMETABLE
+// ============================================
+
+model ClassRoutine {
+  id               String   @id @default(uuid())
+  institutionId    String
+  classId          String   // AcademicStructure
+  subjectId        String?  // AcademicStructure or name
+  subjectName      String?
+  teacherId        String   // User id (TEACHER)
+  teacherProfileId String?
+  dayOfWeek        Int      // 0=Sun, 1=Mon, ... 6=Sat
+  startTime        String   // "09:00"
+  endTime          String   // "10:00"
+  room             String?
+  academicYear     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  institution    Institution     @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  teacherProfile TeacherProfile? @relation(fields: [teacherProfileId], references: [id], onDelete: SetNull)
+
+  @@map("class_routines")
+}
+
+// ============================================
+// FEE & PAYMENT
+// ============================================
+
+model FeeStructure {
+  id             String   @id @default(uuid())
+  institutionId  String
+  name           String   // e.g., "Monthly Fee", "Admission Fee"
+  code           String
+  classId        String?  // Optional: class-specific fee
+  amount         Decimal  @db.Decimal(12, 2)
+  feeType        FeeType  @default(MONTHLY)
+  academicYear   String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  institution Institution     @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  payments    StudentPayment[]
+
+  @@unique([institutionId, code])
+  @@map("fee_structures")
+}
+
+enum FeeType {
+  MONTHLY
+  YEARLY
+  ONE_TIME
+  ADMISSION
+}
+
+model StudentPayment {
+  id              String        @id @default(uuid())
+  institutionId   String
+  studentId       String
+  feeStructureId  String
+  amount          Decimal       @db.Decimal(12, 2)
+  paidAmount      Decimal       @db.Decimal(12, 2)
+  dueAmount       Decimal       @db.Decimal(12, 2) @default(0)
+  paymentDate     DateTime      @db.Date
+  month           Int?          // 1-12 for monthly
+  year            Int?          // e.g., 2025
+  status          PaymentStatus @default(PENDING)
+  paymentMethod   String?       // CASH, CARD, ONLINE, etc.
+  referenceNo     String?
+  remarks         String?
+  receivedById    String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  feeStructure FeeStructure @relation(fields: [feeStructureId], references: [id], onDelete: Restrict)
+
+  @@map("student_payments")
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIAL
+  OVERDUE
+  CANCELLED
 }
 
 // ============================================

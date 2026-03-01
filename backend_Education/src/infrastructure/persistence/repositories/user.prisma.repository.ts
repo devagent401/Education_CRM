@@ -3,12 +3,49 @@ import { PrismaService } from '../prisma/prisma.service';
 import type {
   IUserRepository,
   CreateUserInput,
+  UserWithInstitution,
 } from '../../../domain/repositories';
 import type { User } from '../../../domain/entities';
 
 @Injectable()
 export class UserPrismaRepository implements IUserRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  async findByEmailGlobal(email: string): Promise<UserWithInstitution | null> {
+    const row = await this.prisma.user.findFirst({
+      where: {
+        email: { equals: email.trim(), mode: 'insensitive' },
+        deletedAt: null,
+      },
+      include: {
+        institution: {
+          select: { id: true, name: true, code: true, slug: true, logoUrl: true },
+        },
+      },
+    });
+    if (!row) return null;
+    return {
+      ...this.toDomain(row),
+      institution: {
+        ...row.institution,
+        logoUrl: row.institution.logoUrl ?? undefined,
+      },
+    };
+  }
+
+  async updateLastLogin(id: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id },
+      data: { lastLoginAt: new Date() },
+    });
+  }
+
+  async updatePassword(id: string, hashedPassword: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword },
+    });
+  }
 
   async findById(id: string): Promise<User | null> {
     const row = await this.prisma.user.findUnique({

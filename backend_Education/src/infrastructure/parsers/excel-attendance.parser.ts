@@ -33,7 +33,7 @@ export class ExcelAttendanceParser {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+    const data = XLSX.utils.sheet_to_json<any>(sheet, {
       header: 1,
       defval: '',
     }) as (string | number)[][];

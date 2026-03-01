@@ -12,9 +12,14 @@ export interface Institution {
   email: string;
   phone?: string;
   address?: string;
+  website?: string;
   logoUrl?: string;
+  bannerUrl?: string;
+  footerText?: string;
+  tagline?: string;
   primaryColor?: string;
   secondaryColor?: string;
+  socialLinks?: Record<string, string>;
   status: InstitutionStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -28,7 +33,12 @@ export interface CreateInstitutionInput {
   email: string;
   phone?: string;
   address?: string;
+  website?: string;
   logoUrl?: string;
+  bannerUrl?: string;
+  footerText?: string;
+  tagline?: string;
   primaryColor?: string;
   secondaryColor?: string;
+  socialLinks?: Record<string, string>;
 }

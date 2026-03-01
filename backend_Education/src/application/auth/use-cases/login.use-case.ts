@@ -3,19 +3,28 @@ import type { IUserRepository } from '../../../domain/repositories';
 import type { AuthenticatedUser } from '../../../domain/entities';
 
 export interface LoginInput {
-  institutionId: string;
   email: string;
   password: string;
 }
 
+export interface InstitutionInfo {
+  id: string;
+  name: string;
+  code: string;
+  slug: string;
+  logoUrl?: string;
+}
+
 export interface LoginResult {
   user: AuthenticatedUser;
+  institution: InstitutionInfo;
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
 }
 
 export interface IAuthService {
+  hashPassword(plainPassword: string): Promise<string>;
   validateCredentials(
     institutionId: string,
     email: string,
@@ -39,19 +48,16 @@ export class LoginUseCase {
   ) {}
 
   async execute(input: LoginInput): Promise<LoginResult> {
-    const user = await this.userRepository.findByEmail(
-      input.institutionId,
-      input.email,
-    );
+    const userWithInst = await this.userRepository.findByEmailGlobal(input.email);
 
-    if (!user || !user.isActive) {
+    if (!userWithInst || !userWithInst.isActive) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const isValid = await this.authService.validateCredentials(
-      input.institutionId,
+      userWithInst.institutionId,
       input.email,
-      user.password,
+      userWithInst.password,
       input.password,
     );
 
@@ -60,14 +66,17 @@ export class LoginUseCase {
     }
 
     const authenticatedUser: AuthenticatedUser = {
-      ...user,
-      permissions: [], // Resolved from role
+      ...userWithInst,
+      permissions: [],
     };
 
     const tokens = await this.authService.generateTokens(authenticatedUser);
 
+    await this.userRepository.updateLastLogin(userWithInst.id);
+
     return {
       user: authenticatedUser,
+      institution: userWithInst.institution,
       ...tokens,
     };
   }

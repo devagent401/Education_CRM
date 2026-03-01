@@ -13,6 +13,9 @@ export interface Student {
   dateOfBirth?: Date;
   gender?: string;
   guardianId?: string;
+  classId?: string;
+  shift?: string;
+  batch?: string;
   status: StudentStatus;
   admissionData?: Record<string, unknown>;
   photoUrl?: string;
@@ -29,5 +32,8 @@ export interface CreateStudentInput {
   dateOfBirth?: Date;
   gender?: string;
   guardianId?: string;
+  classId?: string;
+  shift?: string;
+  batch?: string;
   admissionData?: Record<string, unknown>;
 }

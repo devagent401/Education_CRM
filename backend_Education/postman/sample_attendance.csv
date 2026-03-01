@@ -1,0 +1,6 @@
+roll_number,student_id,status,remarks
+101,,PRESENT,On time
+102,,ABSENT,Sick
+103,,LATE,Train delay
+,,00000000-0000-0000-0000-000000000001,PRESENT,
+,,00000000-0000-0000-0000-000000000002,EXCUSED,Medical appointment
